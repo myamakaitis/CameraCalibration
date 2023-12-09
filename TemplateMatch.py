@@ -3,62 +3,86 @@ import cv2 as cv
 from numpy.fft import fft2, ifft2, fftshift
 import matplotlib.pyplot as pyp
 
+rmPt = []
 
-def GetMarkLocs(Img, MinSeparation, template=None, AvgWindow=9, MinContrast=2):
+def click_rm(event, u, v, flags, param):
+    # grab references to the global variables
+    global rmPt
+    if event == cv.EVENT_LBUTTONDOWN:
+        rmPt.append(np.array([u, v]))
+
+
+def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=2.1):
 
     if template is None:
-        r = cv.selectROI("Select Template", Img)
+        r = cv.selectROI("Select Template", img)
 
         cv.destroyWindow("Select Template")
 
-        template = Img[int(r[1]):int(r[1] + r[3]),
+        template = img[int(r[1]):int(r[1] + r[3]),
                        int(r[0]):int(r[0] + r[2])]
 
-    peaks, _, _ = DotPeaks(Img, Template)
-    localPeaks = MaxFind(Peaks, MinSeparation, MinContrast)
-    peakIndices = np.where(localPeaks)
+    peaks, _, _ = DotPeaks(img, template)
+    local_peaks = MaxFind(peaks, MinSeparation, MinContrast)
+    peak_indices = np.where(local_peaks)
 
-    u_int = peakIndices[1]
-    v_int = peakIndices[0]
+    u_int = peak_indices[1]
+    v_int = peak_indices[0]
 
-    ShowCircs(Img, u_int, v_int)
+    bad_points = ShowCircs(img, u_int, v_int)
+    u_int, v_int = u_int[bad_points], v_int[bad_points]
 
-    u, v = SubPixelPeaks(Peaks, u_int, v_int, AvgWindow)
+    u, v = SubPixelPeaks(peaks, u_int, v_int, AvgWindow)
 
     return u, v, template
 
 
 def ShowCircs(img_gs, u, v):
+    global rmPt
+    rmPt = []
+
     g = np.zeros((*img_gs.shape, 3), dtype=np.uint8)
     for i in range(3):
-        g[:, :, i] = Img
+        g[:, :, i] = img_gs
 
     for k in range(len(u)):
         g[v[k] - 1:v[k] + 2, u[k] - 1:u[k] + 2, :] = (255, 0, 0)
-        cv.circle(g, (u[k], v[k]), 17, (0, 0, 255))
+        cv.circle(g, (u[k], v[k]), 17, (0, 0, 255), 3)
+
+    cv.namedWindow("Found Marks")
+    cv.setMouseCallback("Found Marks", click_rm)
 
     cv.imshow("Found Marks", g)
     cv.waitKey(0)
     cv.destroyWindow("Found Marks")
 
+    bad_points = np.full(len(u), True)
 
-def CovarianceTemplate(Img, Template):
+    for pt in rmPt:
+        diff = ((u-pt[0])**2 + (v-pt[1])**2)
 
-    Img = Img.astype(np.float64)
-    Template = Template.astype(np.float64)
+        bad_points[diff == diff.min()] = False
 
-    n_rows, n_cols = Img.shape[0], Img.shape[1]
+    return bad_points
 
-    Template -= np.mean(Template)
 
-    row_pad = n_rows - Template.shape[0]
-    col_pad = n_cols - Template.shape[1]
+def CovarianceTemplate(img, template):
+
+    img = img.astype(np.float64)
+    template = template.astype(np.float64)
+
+    n_rows, n_cols = img.shape[0], img.shape[1]
+
+    template -= np.mean(template)
+
+    row_pad = n_rows - template.shape[0]
+    col_pad = n_cols - template.shape[1]
 
     row_pad_half = row_pad // 2
     col_pad_half = col_pad // 2
 
     # pad the template to the image size
-    template_pad = np.pad(Template,
+    template_pad = np.pad(template,
                           ((row_pad_half, row_pad_half + row_pad % 2),
                            (col_pad_half, col_pad_half + col_pad % 2)),
                           mode='constant')
@@ -68,34 +92,34 @@ def CovarianceTemplate(Img, Template):
     # Correlation
 
     # Calculate local average over a square window
-    EX = np.real(fftshift(ifft2(fft2(Img) * np.conjugate(fft2(square_window)))))
+    EX = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(square_window)))))
 
 
     #Subtract Local Average
-    Img -= EX
+    img -= EX
 
     #Compute Covariance
-    C = np.real(fftshift(ifft2(fft2(Img) * np.conjugate(fft2(template_pad)))))
+    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template_pad)))))
 
     return C
 
 
-def CorrelateTemplate(Img, Template):
+def CorrelateTemplate(img, template):
 
-    Img = Img.astype(np.float64)
-    Template = Template.astype(np.float64)
+    img = img.astype(np.float64)
+    template = template.astype(np.float64)
 
-    n_rows, n_cols = Img.shape[0], Img.shape[1]
+    n_rows, n_cols = img.shape[0], img.shape[1]
 
 
-    row_pad = n_rows - Template.shape[0]
-    col_pad = n_cols - Template.shape[1]
+    row_pad = n_rows - template.shape[0]
+    col_pad = n_cols - template.shape[1]
 
     row_pad_half = row_pad // 2
     col_pad_half = col_pad // 2
 
     # pad the template to the image size
-    template_pad = np.pad(Template,
+    template_pad = np.pad(template,
                           ((row_pad_half, row_pad_half + row_pad % 2),
                            (col_pad_half, col_pad_half + col_pad % 2)),
                           mode='constant')
@@ -107,7 +131,7 @@ def CorrelateTemplate(Img, Template):
 
     #EX = np.real(fftshift(ifft2(fft2(Img) * np.conjugate(fft2(square_window)))))
     # Img -= EX
-    C = np.real(fftshift(ifft2(fft2(Img) * np.conjugate(fft2(template_pad)))))
+    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template_pad)))))
 
 
     #EX2 = np.real(fftshift(ifft2(fft2(Img**2) * np.conjugate(fft2(square_window)))))
