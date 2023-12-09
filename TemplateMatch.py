@@ -210,8 +210,8 @@ def SubPixelPeaks(PeakImg, u_int, v_int, Window):
 if __name__ == "__main__":
     from cv2 import imread
 
-    Img = imread("Perspective.png")[:, :, 0]
-    Template = imread("dot_template.png")[:, :, 0]
+    Img = imread("TestCases/Perspective.png")[:, :, 0]
+    Template = imread("TestCases/dot_template.png")[:, :, 0]
 
     Peaks, c, cFH = DotPeaks(Img, Template)
 
