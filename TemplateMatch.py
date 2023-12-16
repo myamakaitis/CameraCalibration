@@ -5,6 +5,7 @@ import matplotlib.pyplot as pyp
 
 rmPt = []
 
+
 def click_rm(event, u, v, flags, param):
     # grab references to the global variables
     global rmPt
@@ -12,15 +13,26 @@ def click_rm(event, u, v, flags, param):
         rmPt.append(np.array([u, v]))
 
 
+def MakeTemplate(img):
+
+    imgd = img-img.min()
+
+    imgd = (imgd.astype(np.float32)*255/imgd.max()).astype(np.uint8)
+
+    r = cv.selectROI("Select Template", imgd)
+
+    cv.destroyWindow("Select Template")
+
+    template = img[int(r[1]):int(r[1] + r[3]),
+                   int(r[0]):int(r[0] + r[2])]
+
+    return template
+
+
 def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=2.1):
 
     if template is None:
-        r = cv.selectROI("Select Template", img)
-
-        cv.destroyWindow("Select Template")
-
-        template = img[int(r[1]):int(r[1] + r[3]),
-                       int(r[0]):int(r[0] + r[2])]
+        template = MakeTemplate(img)
 
     peaks, _, _ = DotPeaks(img, template)
     local_peaks = MaxFind(peaks, MinSeparation, MinContrast)
@@ -32,7 +44,7 @@ def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=2.1)
     bad_points = ShowCircs(img, u_int, v_int)
     u_int, v_int = u_int[bad_points], v_int[bad_points]
 
-    u, v = SubPixelPeaks(peaks, u_int, v_int, AvgWindow)
+    u, v = SubPixelPeaks(peaks, u_int, v_int, MinSeparation//3)
 
     return u, v, template
 
@@ -41,13 +53,15 @@ def ShowCircs(img_gs, u, v):
     global rmPt
     rmPt = []
 
-    g = np.zeros((*img_gs.shape, 3), dtype=np.uint8)
+    color_value = np.iinfo(img_gs.dtype).max
+
+    g = np.zeros((*img_gs.shape, 3), dtype=np.uint16)
     for i in range(3):
         g[:, :, i] = img_gs
 
     for k in range(len(u)):
-        g[v[k] - 1:v[k] + 2, u[k] - 1:u[k] + 2, :] = (255, 0, 0)
-        cv.circle(g, (u[k], v[k]), 17, (0, 0, 255), 3)
+        g[v[k] - 1:v[k] + 2, u[k] - 1:u[k] + 2, :] = (color_value, color_value, color_value)
+        cv.circle(g, (u[k], v[k]), 17, (color_value, color_value, color_value), 3)
 
     cv.namedWindow("Found Marks")
     cv.setMouseCallback("Found Marks", click_rm)
@@ -82,12 +96,14 @@ def CovarianceTemplate(img, template):
     col_pad_half = col_pad // 2
 
     # pad the template to the image size
-    template_pad = np.pad(template,
-                          ((row_pad_half, row_pad_half + row_pad % 2),
-                           (col_pad_half, col_pad_half + col_pad % 2)),
-                          mode='constant')
+    if template.shape != img.shape:
 
-    square_window = np.copy(template_pad)
+        template = np.pad(template,
+                              ((row_pad_half, row_pad_half + row_pad % 2),
+                               (col_pad_half, col_pad_half + col_pad % 2)),
+                              mode='constant')
+
+    square_window = np.copy(template)
     square_window[square_window > 0] = 1
     # Correlation
 
@@ -99,7 +115,7 @@ def CovarianceTemplate(img, template):
     img -= EX
 
     #Compute Covariance
-    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template_pad)))))
+    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template)))))
 
     return C
 
@@ -111,7 +127,6 @@ def CorrelateTemplate(img, template):
 
     n_rows, n_cols = img.shape[0], img.shape[1]
 
-
     row_pad = n_rows - template.shape[0]
     col_pad = n_cols - template.shape[1]
 
@@ -119,20 +134,17 @@ def CorrelateTemplate(img, template):
     col_pad_half = col_pad // 2
 
     # pad the template to the image size
-    template_pad = np.pad(template,
-                          ((row_pad_half, row_pad_half + row_pad % 2),
-                           (col_pad_half, col_pad_half + col_pad % 2)),
-                          mode='constant')
+    if template.shape != img.shape:
 
-    square_window = np.copy(template_pad)
-    square_window[square_window > 0] = 1
+        template = np.pad(template,
+                              ((row_pad_half, row_pad_half + row_pad % 2),
+                               (col_pad_half, col_pad_half + col_pad % 2)),
+                              mode='constant')
 
     # Correlation
-
     #EX = np.real(fftshift(ifft2(fft2(Img) * np.conjugate(fft2(square_window)))))
     # Img -= EX
-    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template_pad)))))
-
+    C = np.real(fftshift(ifft2(fft2(img) * np.conjugate(fft2(template)))))
 
     #EX2 = np.real(fftshift(ifft2(fft2(Img**2) * np.conjugate(fft2(square_window)))))
 
@@ -150,8 +162,8 @@ def DotPeaks(img, template):
     # imgFH = ForstnerHarris(img, 16)
     # templateFH = ForstnerHarris(template, 16)
 
-    imgFH = np.abs(cv.cornerHarris(img.astype(np.float32), 2, 3, 0.05))
-    templateFH = np.abs(cv.cornerHarris(template.astype(np.float32), 2, 3, 0.05))
+    imgFH = np.abs(cv.cornerHarris(img.astype(np.float32), 2, 7, 0.05))
+    templateFH = np.abs(cv.cornerHarris(template.astype(np.float32), 2, 7, 0.05))
 
     # templateFH = templateFH - templateFH.min()
     # templateFH /= templateFH.max()
@@ -225,12 +237,15 @@ if __name__ == "__main__":
     ax[4].imshow(cv.dilate(PeakLocs.astype(np.uint8), np.ones((5, 5), dtype=np.uint8)))
     fig.show()
 
-    GetMarkLocs(Img, 64)
+    # GetMarkLocs(Img, 64)
 
     #
 
     # ImgCD = ForstnerHarris(Img, 16)
-    # TemplateCD = ForstnerHarris(template, 16)
+    TemplateCD = cv.cornerHarris(Template.astype(np.float32), 2, 5, 0.05)
+    fig, ax = pyp.subplots()
+    ax.imshow(TemplateCD)
+    fig.show()
     #
     # TemplateCD = TemplateCD - TemplateCD.min()
     # TemplateCD /= TemplateCD.max()

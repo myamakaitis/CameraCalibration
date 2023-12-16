@@ -2,20 +2,10 @@ import numpy as np
 
 
 class Pinhole:
-    def __init__(self, f, Center, Angles, k):
-        self.theta = Angles[0]
-        self.phi = Angles[1]
-        self.psi = Angles[2]
+    def __init__(self, Center, PixelPitch):
 
-        self.tx, self.ty, self.tz = Center
-
-        self.f = f
-        self.k = k
-
-        self.RotMat_EulerAngles(*Angles)
-        self.TransVec()
-        self.ACalc()
-        self.RtCalc()
+        self.Cx, self.Cy = Center[0], Center[1]
+        self.dx = PixelPitch
 
     def RotMat_EulerAngles(self, phi, psi, theta):
         sin_phi, cos_phi = np.sin(phi), np.cos(phi)
@@ -34,18 +24,12 @@ class Pinhole:
 
     def TransVec(self):
         self.T = np.array([self.tx, self.ty, self.tz])
-
         return self.T
 
     def RtCalc(self):
         self.Rt = np.zeros((3, 4), dtype=np.float64)
         self.Rt[:3, :3] = self.R
         self.Rt[:, 3] = self.T
-
-    def ACalc(self):
-        self.A = np.array([[-self.f, 0, 0],
-                           [0, self.f, 0, ],
-                           [0, 0, 1]])
 
     def PCalc(self):
         return self.A @ self.Rt
@@ -56,7 +40,7 @@ class Pinhole:
 
     def PerspectiveEqn(self, x, y, z):
         # 3d cam coordinates -> Undistorted Image Coordinates
-        Xu, Yu = -self.f * (x / z), -self.f * (y / z)
+        Xu, Yu = self.f * (x / z), self.f * (y / z)
 
         return Xu, Yu
 
@@ -73,18 +57,119 @@ class Pinhole:
     def RealCoordinates(self, X, Y):
         # distorted cam coordinates -> pixel coordinates
 
-        Xf = X
-        Yf = Y
+        u = self.sx*X/self.dx + self.Cx
+        v = Y/self.dx + self.Cy
 
-        return Xf, Yf
+        return u, v
 
     def Map(self, Xw, Yw, Zw):
         x, y, z = self.RigidBodyTransform(Xw, Yw, Zw)
         Xu, Yu = self.PerspectiveEqn(x, y, z)
         X, Y = self.RadialDistortion(Xu, Yu)
-        Xf, Yf = self.RealCoordinates(X, Y)
+        u, v = self.RealCoordinates(X, Y)
 
-        return Xf, Yf
+        return u, v
+
+    def Fit(self, u, v, Xw, Yw, Zw):
+
+        up = (u - self.Cx)*self.dx
+        vp = (v - self.Cy)*self.dx
+
+        Tr = self.ComputeTr(up, vp, Xw, Yw, Zw)
+
+        testpoint = np.array([Xw[0], Yw[0], Zw[0]])
+        testmap = np.array([up[0], vp[0]])
+        Tx, Ty, sx = self.CalcRT(Tr, testpoint, testmap)
+
+        f, Tz = self.CalcfTz(Ty, vp, Xw, Yw, Zw)
+
+        self.T = np.array([Tx, Ty, Tz])
+        self.f = f
+        self.sx = sx
+
+        self.RtCalc()
+
+    def CalcfTz(self, Ty, vp, xw, yw, zw):
+
+        yi = self.R[1, 0] * xw + self.R[1, 1]*yw + self.R[1, 2]*zw + Ty
+        wi = self.R[2, 0] * xw + self.R[2, 1]*yw + self.R[2, 2]*zw
+
+
+        sys = np.zeros((len(vp), 2))
+        sys[:, 0] = yi
+        sys[:, 1] = -vp
+
+        rhs = vp*wi
+
+        (f, Tz), _, _, _ = np.linalg.lstsq(sys, rhs, rcond=None)
+
+        return f, Tz
+
+    def ComputeTr(self, up, vp, xw, yw, zw):
+
+        System = np.zeros((len(up), 7))
+
+        System[:, 0] = vp*xw
+        System[:, 1] = vp*yw
+        System[:, 2] = vp*zw
+        System[:, 3] = vp
+        System[:, 4] = -up*xw
+        System[:, 5] = -up*yw
+        System[:, 6] = -up*zw
+
+        Tr, _, _, _ = np.linalg.lstsq(System, up, rcond=None)
+
+        # Tr = [ sx r1 / Ty, sx r2 / Ty, sx r3 / Ty,
+        #        sx Tx / Ty, r4 / Ty, r5 / Ty, r6 / Ty ]
+
+        return Tr
+
+    def CalcRT(self, Tr, TestXYZ, TestUV):
+
+        abs_Ty = (Tr[4]**2 + Tr[5]**2 + Tr[6]**2)**(-0.5)
+        sx = (Tr[0]**2 + Tr[1]**2 + Tr[2]**2)**(0.5) * abs_Ty
+
+        r1 = Tr[0]*abs_Ty/sx
+        r2 = Tr[1]*abs_Ty/sx
+        r3 = Tr[2]*abs_Ty/sx
+
+        r4 = Tr[4]*abs_Ty
+        r5 = Tr[5]*abs_Ty
+        r6 = Tr[6]*abs_Ty
+
+        Tx = Tr[3]*abs_Ty
+
+
+        self.R = np.array([[r1, r2, r3],
+                      [r4, r5, r6],
+                      [0.0, 0.0, 0.0]])
+
+        self.R[-1, :] = np.cross(self.R[0, :], self.R[1, :])
+
+        if np.allclose(np.sign(np.linalg.det(self.R)), -1):
+            self.R[-1, :] *= -1
+        if np.abs(np.linalg.det(self.R) - 1) > 1e-3:
+            raise ValueError("Rotation Matrix Determinant != 1")
+
+        sign = self.GetSign(abs_Ty, Tx, self.R, TestXYZ, TestUV)
+
+        Ty = sign*abs_Ty
+        # sx *= sign
+
+        return Tx, Ty, sx
+
+    def GetSign(self, abs_Ty, Tx, R, testxyz, testuv):
+
+        x, y, _ = R @ testxyz
+
+        Xmatch = (np.sign(x + Tx) == np.sign(testuv[0]))
+        Ymatch = (np.sign(y + abs_Ty) == np.sign(testuv[1]))
+
+        if Xmatch and Ymatch:
+            return 1
+        else:
+            return -1
+
 
 class Polynomial:
 
@@ -108,6 +193,20 @@ class Polynomial:
             if row_str == "":
                 row_str = "1"
             self._rl.append(row_str)
+
+        row_str = ""
+        for l in range(self.N_coefficients):
+            row_str = row_str + f"+ a_{l}"
+
+            if self.Ci[l] > 0:
+                row_str = row_str + f"x^{self.Ci[l]}"
+            if self.Cj[l] > 0:
+                row_str = row_str + f"y^{self.Cj[l]} "
+            if self.Ck[l] > 0:
+                row_str = row_str + f"z^{self.Ck[l]}"
+            if row_str == "":
+                row_str = "1"
+        self._rl = row_str
 
         return self._rl
 
@@ -176,75 +275,35 @@ class Polynomial:
 
 if __name__ == '__main__':
 
-    for o in range(1, 9):
-        polyCam = Polynomial(MaxOrders=(o, o, 2))
-        print(polyCam.N_coefficients)
-        print(polyCam.RowLabels)
-
         import matplotlib.pyplot as pyp
+        import pandas as pd
 
-        Nper = 51
+        df = pd.read_csv("Marks_D.csv")
+        X, Y, Z = df["X"], df["Y"], df["Z"]
+        u, v = df["u"], df["v"]
 
-        seq = np.arange(0, Nper, dtype=np.float64)
-        seq0 = np.zeros_like(seq)
-        seqN = np.full_like(seq, Nper)
+        Cam1 = Pinhole((u.mean(), v.mean()), 6.5e-3)
 
-        t = np.linspace(-10, 10, 11)
+        Cam1.Fit(u, v, X, Y, Z)
+        Cam1.k = 0
 
-        x, y = np.meshgrid(t, t)
+        u1, v1 = Cam1.Map(X, Y, Z)
 
-        z = np.zeros_like(x).ravel()
+        fig, (ax1, ax2) = pyp.subplots(2, figsize=(4,8))
 
-        Xtest = np.concatenate([x.ravel(), x.ravel(), x.ravel()])
-        Ytest = np.concatenate([y.ravel(), y.ravel(), y.ravel()])
-        Ztest = np.concatenate([z - 5, z, z + 5])
+        ax1.scatter(u, v, s=1)
+        ax2.scatter(u1, v1, s=1)
 
-        TestPoints = (Xtest, Ytest, Ztest)
-
-        colors = len(z) * ['red'] + len(z) * ['seagreen'] + len(z) * ['navy']
-
-        fig = pyp.figure()
-        ax = fig.add_subplot(projection='3d')
-        ax.scatter(Xtest, Ytest, Ztest, color=colors)
-
-        ax.set_title("Simulated Points")
-        # fig.show()
-
-        Angles = np.radians(np.array([15, 0, 45]))
-        Cam1 = Pinhole(10, (0, 0, -30), Angles, .01)
-        P1 = Cam1.PCalc()
-
-        u1, v1 = Cam1.Map(Xtest, Ytest, Ztest)
-
-        e_poly = polyCam.FitCam(u1[::2], v1[::2], Xtest[::2], Ytest[::2], Ztest[::2])
-
-        u2, v2 = polyCam.Map(Xtest, Ytest, Ztest)
-
-        fig, (ax1, ax2) = pyp.subplots(1, 2, sharex=True, sharey=True, figsize=(8, 4))
-        fig.suptitle(f"Order = {o}")
-        ax1.scatter(u1, v1, color=colors, alpha=0.5, s=3)
-
-        ax1.set_title("Projected Points Cam 1")
         ax1.set_aspect('equal')
-        ax1.grid(True)
-
-        ax2.set_title("Projected Points Cam 2")
-        ax2.scatter(u2, v2, color=colors, alpha=0.5, s=3)
         ax2.set_aspect('equal')
-        ax2.grid(True)
 
         fig.show()
 
-        e_u, e_v = u2 - u1, v2 - v1
-        e = np.sqrt(np.sum(1/len(e_u) * (e_u**2 + e_v**2)))
+        print(Cam1.Rt)
+        print(Cam1.f)
+        print(Cam1.sx)
 
-        e_train = np.sqrt(np.sum(1 / len(e_u[::2]) * (e_u[::2] ** 2 + e_v[::2] ** 2)))
-        e_test = np.sqrt(np.sum(1 / len(e_u[1::2]) * (e_u[1::2] ** 2 + e_v[1::2] ** 2)))
 
-        print(f"\nOrder : {o}")
-        print(f"Error: {e}")
-        print(f"Train Error {e_train}")
-        print(f"Test Error {e_test}")
 
 
 

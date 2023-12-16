@@ -20,6 +20,14 @@ def ShowTable(img, table):
 
     n_rows, n_cols = table.values.shape
 
+    img_8bit = (img.astype(np.float32)*(255/img.max())).astype(np.uint8)
+
+    img_8bit_c = np.zeros((*img_8bit.shape, 3), dtype=np.uint8)
+    for i in range(3):
+        img_8bit_c[:, :, i] = img_8bit
+
+    color_value = 255
+
     for l in range(0, n_rows):
 
         u1, v1 = table.iloc[l, 0], table.iloc[l, 1]
@@ -27,10 +35,10 @@ def ShowTable(img, table):
 
         i1, j1 = table.iloc[l, 2], table.iloc[l, 3]
 
-        cv.circle(img, (int(u1), int(v1)), 17, (0, 255, 0))
+        cv.circle(img_8bit_c, (int(u1), int(v1)), 17, (0, color_value, 0))
 
         if i1 == 0 and j1 == 0:
-            cv.circle(img, (int(u1), int(v1)), 17, (255, 0, 255))
+            cv.circle(img_8bit_c, (int(u1), int(v1)), 17, (color_value, 0, color_value))
 
         for m in range(l, n_rows):
             u2, v2 = table.iloc[m, 0], table.iloc[m, 1]
@@ -39,13 +47,15 @@ def ShowTable(img, table):
             i2, j2 = table.iloc[m, 2], table.iloc[m, 3]
 
             if np.abs(i2 - i1) == 2 and j2 == j1:
-                cv.line(img, (u1, v1), (u2, v2), (255, 0, 0))
+                cv.line(img_8bit_c, (u1, v1), (u2, v2), (color_value, 0, 0))
             elif np.abs(j2 - j1) == 2 and i2 == i1:
-                cv.line(img, (u1, v1), (u2, v2), (0, 0, 255))
+                cv.line(img_8bit_c, (u1, v1), (u2, v2), (0, 0, color_value))
 
-    cv.imshow("Extracted Locations", img)
+    cv.imshow("Extracted Locations", img_8bit_c)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+    return img_8bit_c
 
 
 class PatternGrid:
@@ -91,8 +101,9 @@ class PatternGrid:
 
         X, Y = self.WorldPos(row, col)
 
-        self.RemoveNonAdj(row, col, X, Y)
-        invalid = (row % 2 == 1) + (col % 2 == 1)
+        # self.RemoveNonAdj(row, col, X, Y)
+
+        invalid = ((row % 2 == 1) + (col % 2 == 1))
         Y[invalid], X[invalid] = np.nan, np.nan
 
         return row, col, X, Y
@@ -164,6 +175,32 @@ class PatternGrid:
         self.Origin = refPt[0]
         self.d_px_x = refPt[1] - self.Origin
         self.d_px_y = refPt[2] - self.Origin
+
+        self.CalcRefVecMag()
+
+    def AdjustRefs(self, table):
+
+        global refPt
+        refPt = []
+
+        u, v = table['u'].values, table['v'].values
+
+        origin_index = ((u - self.Origin[0])**2 + (v - self.Origin[1])**2).argmin()
+
+        self.Origin = np.array([u[origin_index], v[origin_index]])
+
+        du = u - self.Origin[0]
+        dv = v - self.Origin[1]
+        duv = np.array([du, dv]).T
+
+        row = duv.dot(self.d_px_y) / self.y_mag_px
+        col = duv.dot(self.d_px_x) / self.x_mag_px
+
+        col_i = ((row)**2 + (col - 1)**2).argmin()
+        row_i = ((row - 1)**2 + (col)**2).argmin()
+
+        self.d_px_x = np.array([u[col_i], v[col_i]]) - self.Origin
+        self.d_px_y = np.array([u[row_i], v[row_i]]) - self.Origin
 
         self.CalcRefVecMag()
 

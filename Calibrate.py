@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 from SortDots import PatternGrid, ShowTable
-from TemplateMatch import GetMarkLocs
+from TemplateMatch import GetMarkLocs, MakeTemplate
 
 
 def MakeTable(u_marks, v_marks, translation):
@@ -21,41 +21,64 @@ def MakeTable(u_marks, v_marks, translation):
     return mark_table
 
 
-def CalibrateGrid(ImagesPath, translations, GridSpacing, PM_Channel=0):
+def CalibrateGrid(ImagesPath, translations, GridSpacing, stack_template=None):
 
+    table = pd.DataFrame(columns=["u", "v", "j", "i", "X", "Y", "Z"])
+    labelled_imgs = []
+
+    pattern = PatternGrid(GridSpacing)
     for ImgName, shift in zip(ImagesPath, translations):
 
-        Img = cv.imread(ImgName)
-        ImgPM = Img[:, :, PM_Channel]
+        Img = cv.imread(ImgName, -1)
+        # ImgPM = Img[:, :, PM_Channel]
 
-        pattern = PatternGrid(GridSpacing)
-        pattern.CreateRefs(np.copy(Img))
+        if pattern.Origin[0] is None:
+            pattern.CreateRefs(np.copy(Img))
 
         spacing_px = pattern.AvgSeparation()
-        u_marks, v_marks, _ = GetMarkLocs(ImgPM, int(0.7*spacing_px))
+        u_marks, v_marks, _ = GetMarkLocs(Img, int(0.7*spacing_px), template=stack_template)
 
-        table = MakeTable(u_marks, v_marks, shift)
+        table_z = MakeTable(u_marks, v_marks, shift)
+
+        pattern.AdjustRefs(table_z)
 
         j, i, x, y = pattern.PosSort(u_marks, v_marks)
-        table["j"] = j
-        table["i"] = i
+        table_z["j"] = j
+        table_z["i"] = i
 
-        table["X"] += x
-        table["Y"] += y
+        table_z["X"] += x
+        table_z["Y"] += y
 
-        table = table.dropna()
+        table_z = table_z.dropna()
 
-        ShowTable(Img, table)
+        img_labelled = ShowTable(Img, table_z)
+        labelled_imgs.append(img_labelled)
+
+        table = table.append(table_z)
+
+    return table, labelled_imgs
 
 
 if __name__ == "__main__":
 
-    imgs = ["Good.png", "Perspective.png", "DistortedVignetting.png"]
+    Case = "A"
 
-    z = (0, 0, 0)
-    translations = [np.array([0, 0, zi]) for zi in z]
+    Folder = f"TestCases/Perspective{Case}/"
+    imgs = [Folder + f"cal_{i:03d}_{Case}.tif" for i in range(12)]
 
-    CalibrateGrid(imgs, translations, 1.5)
+    z = np.arange(0, 12)
+
+    print(z)
+    Translations = [np.array([0, 0, zi]) for zi in z]
+
+    InFocusTemplate = MakeTemplate(cv.imread(imgs[6], -1))
+
+    Table, colored_images = CalibrateGrid(imgs, Translations, 1, stack_template=InFocusTemplate)
+
+    Table.to_csv(f"Marks_{Case}.csv")
+
+    for i in range(12):
+        cv.imwrite(Folder + f"AfterCal/Cal_z={z[i]}.png", colored_images[i])
 
     print("done")
 
