@@ -229,12 +229,24 @@ if __name__ == "__main__":
 
     PeakLocs = MaxFind(Peaks, 64, 5)
 
-    fig, ax = pyp.subplots(1, 5, figsize = (5*3.5, 4), dpi=300)
-    ax[0].imshow(Img)
+
+
+    fig, ax = pyp.subplots(1, 5, figsize = (5*3, 4), dpi=300)
+    ax[0].imshow(Img, cmap='Greys_r')
+    ax[0].set_title("\nOriginal Image")
     ax[1].imshow(c)
+    ax[1].set_title("\nTemplate Covariance")
     ax[2].imshow(cFH)
+    ax[2].set_title("\nHarris CD Covariance")
     ax[3].imshow(Peaks)
-    ax[4].imshow(cv.dilate(PeakLocs.astype(np.uint8), np.ones((5, 5), dtype=np.uint8)))
+    ax[3].set_title("\nEstimates Multiplied")
+    ax[4].imshow(cv.dilate(PeakLocs.astype(np.uint8), np.ones((7, 7), dtype=np.uint8)))
+    ax[4].set_title("\nRecovered Peaks")
+
+    for axis in ax:
+        axis.axis('off')
+
+    fig.tight_layout()
     fig.show()
 
     # GetMarkLocs(Img, 64)

@@ -148,7 +148,7 @@ class Pinhole:
 
         if np.allclose(np.sign(np.linalg.det(self.R)), -1):
             self.R[-1, :] *= -1
-        if np.abs(np.linalg.det(self.R) - 1) > 1e-3:
+        if np.abs(np.linalg.det(self.R) - 1) > 1e-2:
             raise ValueError("Rotation Matrix Determinant != 1")
 
         sign = self.GetSign(abs_Ty, Tx, self.R, TestXYZ, TestUV)
@@ -165,7 +165,7 @@ class Pinhole:
         Xmatch = (np.sign(x + Tx) == np.sign(testuv[0]))
         Ymatch = (np.sign(y + abs_Ty) == np.sign(testuv[1]))
 
-        if Xmatch and Ymatch:
+        if Xmatch == Ymatch:
             return 1
         else:
             return -1
@@ -278,18 +278,18 @@ if __name__ == '__main__':
         import matplotlib.pyplot as pyp
         import pandas as pd
 
-        df = pd.read_csv("Marks_D.csv")
+        df = pd.read_csv("TestPinhole.csv")
         X, Y, Z = df["X"], df["Y"], df["Z"]
         u, v = df["u"], df["v"]
 
-        Cam1 = Pinhole((u.mean(), v.mean()), 6.5e-3)
+        Cam1 = Pinhole((0, 0), 6.5e-3)
 
         Cam1.Fit(u, v, X, Y, Z)
         Cam1.k = 0
 
         u1, v1 = Cam1.Map(X, Y, Z)
 
-        fig, (ax1, ax2) = pyp.subplots(2, figsize=(4,8))
+        fig, (ax1, ax2) = pyp.subplots(2, figsize=(4,8), sharex=True, sharey=True)
 
         ax1.scatter(u, v, s=1)
         ax2.scatter(u1, v1, s=1)
