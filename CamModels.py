@@ -1,11 +1,13 @@
 import numpy as np
+from scipy.optimize import minimize
 
 
 class Pinhole:
-    def __init__(self, Center, PixelPitch):
+    def __init__(self, Center, PixelPitch, k =0):
 
         self.Cx, self.Cy = Center[0], Center[1]
         self.dx = PixelPitch
+        self.k = k
 
     def RotMat_EulerAngles(self, phi, psi, theta):
         sin_phi, cos_phi = np.sin(phi), np.cos(phi)
@@ -26,7 +28,7 @@ class Pinhole:
         self.T = np.array([self.tx, self.ty, self.tz])
         return self.T
 
-    def RtCalc(self):
+    def CombineRT(self):
         self.Rt = np.zeros((3, 4), dtype=np.float64)
         self.Rt[:3, :3] = self.R
         self.Rt[:, 3] = self.T
@@ -70,6 +72,15 @@ class Pinhole:
 
         return u, v
 
+    def RMSE(self, Xw, Yw, Zw, u_actual, v_actual):
+
+        u_rp, v_rp = self.Map(Xw, Yw, Zw)
+        U_e, V_e = u_rp - u_actual, v_rp - v_actual
+        e = (U_e ** 2 + V_e ** 2)
+
+        rmse = np.sqrt(np.sum(1 / len(e) * e))
+        return rmse
+
     def Fit(self, u, v, Xw, Yw, Zw):
 
         up = (u - self.Cx)*self.dx
@@ -81,15 +92,34 @@ class Pinhole:
         testmap = np.array([up[0], vp[0]])
         Tx, Ty, sx = self.CalcRT(Tr, testpoint, testmap)
 
-        f, Tz = self.CalcfTz(Ty, vp, Xw, Yw, Zw)
+        f, Tz = self.Approx_f_Tz(Ty, vp, Xw, Yw, Zw)
 
         self.T = np.array([Tx, Ty, Tz])
         self.f = f
         self.sx = sx
 
-        self.RtCalc()
+        self.CombineRT()
 
-    def CalcfTz(self, Ty, vp, xw, yw, zw):
+        self.Refine_f_Tz(Xw, Yw, Zw, u, v)
+
+    def Refine_f_Tz(self, Xw, Yw, Zw, u_act, v_act):
+
+        guess = np.array([self.f, self.T[2]])
+
+        minimize(self.Adjust_f_Tz, guess,
+                 args=(Xw, Yw, Zw, u_act, v_act))
+
+    def Adjust_f_Tz(self, fTz, Xw, Yw, Zw, u_actual, v_actual):
+
+        self.f = fTz[0]
+        self.T[2] = fTz[1]
+
+        self.CombineRT()
+
+        return self.RMSE(Xw, Yw, Zw, u_actual, v_actual)
+
+
+    def Approx_f_Tz(self, Ty, vp, xw, yw, zw):
 
         yi = self.R[1, 0] * xw + self.R[1, 1]*yw + self.R[1, 2]*zw + Ty
         wi = self.R[2, 0] * xw + self.R[2, 1]*yw + self.R[2, 2]*zw
