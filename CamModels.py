@@ -3,11 +3,10 @@ from scipy.optimize import minimize
 
 
 class Pinhole:
-    def __init__(self, Center, PixelPitch, k =0):
+    def __init__(self, Center, PixelPitch):
 
         self.Cx, self.Cy = Center[0], Center[1]
         self.dx = PixelPitch
-        self.k = k
 
     def RotMat_EulerAngles(self, phi, psi, theta):
         sin_phi, cos_phi = np.sin(phi), np.cos(phi)
@@ -38,7 +37,8 @@ class Pinhole:
 
     def RigidBodyTransform(self, Xw, Yw, Zw):
         # 3D world coordiantes -> 3D cam coordinates
-        return self.Rt @ np.array([Xw, Yw, Zw, 1])
+        ones = np.ones_like(Xw)
+        return self.Rt @ np.array([Xw, Yw, Zw, ones])
 
     def PerspectiveEqn(self, x, y, z):
         # 3d cam coordinates -> Undistorted Image Coordinates
@@ -46,15 +46,15 @@ class Pinhole:
 
         return Xu, Yu
 
-    def RadialDistortion(self, Xu, Yu):
+    def Distortion(self, Xu, Yu):
         # undistorted image coordinates -> distorted coordinates
 
-        R2 = Xu ** 2 + Yu ** 2
+        # R2 = Xu ** 2 + Yu ** 2
 
-        X = Xu / (1 + self.k * R2)
-        Y = Yu / (1 + self.k * R2)
+        # X = Xu / (1 + self.k * R2)
+        # Y = Yu / (1 + self.k * R2)
 
-        return X, Y
+        return Xu, Yu
 
     def RealCoordinates(self, X, Y):
         # distorted cam coordinates -> pixel coordinates
@@ -67,7 +67,7 @@ class Pinhole:
     def Map(self, Xw, Yw, Zw):
         x, y, z = self.RigidBodyTransform(Xw, Yw, Zw)
         Xu, Yu = self.PerspectiveEqn(x, y, z)
-        X, Y = self.RadialDistortion(Xu, Yu)
+        X, Y = self.Distortion(Xu, Yu)
         u, v = self.RealCoordinates(X, Y)
 
         return u, v
@@ -78,7 +78,7 @@ class Pinhole:
         U_e, V_e = u_rp - u_actual, v_rp - v_actual
         e = (U_e ** 2 + V_e ** 2)
 
-        rmse = np.sqrt(np.sum(1 / len(e) * e))
+        rmse = np.sqrt(1 / len(e) * np.sum(e))
         return rmse
 
     def Fit(self, u, v, Xw, Yw, Zw):
@@ -102,6 +102,11 @@ class Pinhole:
 
         self.Refine_f_Tz(Xw, Yw, Zw, u, v)
 
+        self.CalcDistortion(Xw, Yw, Zw, u, v)
+
+    def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
+        pass
+
     def Refine_f_Tz(self, Xw, Yw, Zw, u_act, v_act):
 
         guess = np.array([self.f, self.T[2]])
@@ -109,15 +114,14 @@ class Pinhole:
         minimize(self.Adjust_f_Tz, guess,
                  args=(Xw, Yw, Zw, u_act, v_act))
 
-    def Adjust_f_Tz(self, fTz, Xw, Yw, Zw, u_actual, v_actual):
+    def Adjust_f_Tz(self, fTz, Xw, Yw, Zw, u_act, v_act):
 
         self.f = fTz[0]
         self.T[2] = fTz[1]
 
         self.CombineRT()
 
-        return self.RMSE(Xw, Yw, Zw, u_actual, v_actual)
-
+        return self.RMSE(Xw, Yw, Zw, u_act, v_act)
 
     def Approx_f_Tz(self, Ty, vp, xw, yw, zw):
 
@@ -199,6 +203,102 @@ class Pinhole:
             return 1
         else:
             return -1
+
+
+class PinholeCV2(Pinhole):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.k1 = 0
+        self.k2 = 0
+
+        self.p1 = 0
+        self.p2 = 0
+
+    def Distortion(self, Xu, Yu):
+
+        R2 = Xu**2 + Yu**2
+
+        X = (1 + self.k1 * R2 + self.k2 * R2**2)*Xu + 2*self.p1*Xu*Yu + self.p2*(R2 + 2*Xu)
+        Y = (1 + self.k1 * R2 + self.k2 * R2**2)*Yu + self.p1*(R2 + 2*Yu) + 2*self.p2*Xu*Yu
+
+        return X, Y
+
+    def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
+
+        guess = np.array([0.0, 0.0, 0.0, 0.0])
+
+        minimize(self.AdjustDistortion, guess,
+                 args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-8)
+
+
+    def AdjustDistortion(self, Coeffs, Xw, Yw, Zw, u_act, v_act):
+
+        self.k1 = Coeffs[0]
+        self.k2 = Coeffs[1]
+
+        self.p1 = Coeffs[2]
+        self.p2 = Coeffs[3]
+
+        return self.RMSE(Xw, Yw, Zw, u_act, v_act)
+
+class PinholeCV2_ThinPrism(Pinhole):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.k1 = 0
+        self.k2 = 0
+        self.k3 = 0
+        self.k4 = 0
+
+        self.p1 = 0
+        self.p2 = 0
+
+        self.s1 = 0
+        self.s2 = 0
+
+    def Distortion(self, Xu, Yu):
+
+        R2 = Xu**2 + Yu**2
+
+        X = (1 + self.k1 * R2 + self.k2 * R2**2 + self.k3 * R2**3 + self.k4 * R2**4)*Xu \
+            + 2*self.p1*Xu*Yu + self.p2*(R2 + 2*Xu) \
+            + self.s1*R2
+
+        Y = (1 + self.k1 * R2 + self.k2 * R2**2 + self.k3 * R2**3 + self.k4 * R2**4)*Yu \
+            + self.p1*(R2 + 2*Yu) + 2*self.p2*Xu*Yu \
+            + self.s2*R2
+
+        return X, Y
+
+    def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
+
+        guess = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        minimize(self.AdjustDistortion, guess,
+                 args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-6)
+
+
+    def AdjustDistortion(self, Coeffs, Xw, Yw, Zw, u_act, v_act):
+
+        self.k1 = Coeffs[0]
+        self.k2 = Coeffs[1]
+
+        self.k3 = Coeffs[4]
+        self.k4 = Coeffs[5]
+
+        self.p1 = Coeffs[2]
+        self.p2 = Coeffs[3]
+
+        self.s1 = Coeffs[6]
+        self.s2 = Coeffs[7]
+
+        self.s3 = Coeffs[8]
+        self.s4 = Coeffs[9]
+
+        return self.RMSE(Xw, Yw, Zw, u_act, v_act)
 
 
 class Polynomial:

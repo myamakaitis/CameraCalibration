@@ -1,13 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as pyp
 import pandas as pd
-from CamModels import Pinhole
+from CamModels import Pinhole, PinholeCV2, PinholeCV2_ThinPrism
 from numpy.random import random
 
 from matplotlib.cm import get_cmap
 
 cmap = get_cmap('viridis')
-
 
 MaxErrorColor = 5
 def ErrorColor(error):
@@ -16,12 +15,12 @@ def ErrorColor(error):
 
     return cmap(error)
 
-File = "Marks_B.csv"
+File = "Marks_D.csv"
 Data = pd.read_csv(File)
 
-# Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
+Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
 
-Data.sort_values(by="u", axis=0, inplace=True)
+# Data.sort_values(by="u", axis=0, inplace=True)
 
 u, v = Data["u"].values, Data["v"].values
 X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
@@ -52,7 +51,7 @@ ax[0].set_xlim(-1, 2*u.mean())
 
 for i, (cx, cy) in enumerate(zip(np.linspace(0, 2*u.mean(), 5), np.linspace(0, 2*v.mean(), 5))):
 
-    Cam1 = Pinhole((cx, cy), 1)
+    Cam1 = PinholeCV2_ThinPrism((cx, cy), 1)
 
     Cam1.Fit(u, v, X, Y, Z)
 
@@ -69,6 +68,8 @@ for i, (cx, cy) in enumerate(zip(np.linspace(0, 2*u.mean(), 5), np.linspace(0, 2
     ax[i+1].scatter(u_rp[Sample], v_rp[Sample], color=ErrorColor(np.sqrt(e[Sample])), edgecolor='k')
     # PlotProjErrors(U_e, V_e, e, ax, axh, f"Error", "Histogram")
 
+    print(f"RMSE = {Cam1.RMSE(X, Y, Z, u, v)}, Cx={cx}, Cy={cy}, f={Cam1.f}")
+
 fig.subplots_adjust(right=0.90)
 cbar_ax = fig.add_axes([0.91, 0.15, 0.03, 0.7])
 
@@ -82,32 +83,32 @@ fig.colorbar(im, cax=cbar_ax)
 fig.show()
 
 print(RMSE)
-
-shiftX = np.linspace(0, 2*u.mean())
-shiftY = np.linspace(0, 2*v.mean())
+#
+shiftX = np.linspace(-3*u.mean(), 5*u.mean())
+shiftY = np.linspace(-3*v.mean(), 5*v.mean())
 
 ShiftX, ShiftY = np.meshgrid(shiftX, shiftY)
 
 shape = ShiftX.shape
 RMSE = []
 
-for sx, sy in zip(ShiftX.ravel(), ShiftY.ravel()):
-
-    Cam1 = Pinhole((sx, sy), 1)
-
-    try:
-        Cam1.Fit(u, v, X, Y, Z)
-    except ValueError:
-        RMSE.append(None)
-        continue
-    Cam1.k = 0
-
-    u_rp, v_rp = Cam1.Map(X, Y, Z)
-
-    U_e, V_e = u_rp - u, v_rp - v
-    e = (U_e ** 2 + V_e ** 2)
-
-    RMSE.append(np.sqrt(np.sum(1 / len(e) * e)))
+# for sx, sy in zip(ShiftX.ravel(), ShiftY.ravel()):
+#
+#     Cam1 = PinholeCV2_ThinPrism((sx, sy), 1)
+#
+#     try:
+#         Cam1.Fit(u, v, X, Y, Z)
+#     except ValueError:
+#         RMSE.append(None)
+#         continue
+#     Cam1.k = 0
+#
+#     u_rp, v_rp = Cam1.Map(X, Y, Z)
+#
+#     U_e, V_e = u_rp - u, v_rp - v
+#     e = (U_e ** 2 + V_e ** 2)
+#
+#     RMSE.append(np.sqrt(np.sum(1 / len(e) * e)))
 
 RMSE = np.array(RMSE).reshape(shape).astype(np.float64)
 
@@ -121,12 +122,13 @@ ax.set_xlabel("Center X")
 ax.set_ylabel("Center Y")
 
 RMSE[RMSE > 5.1] = 5.1
-cb = ax.contourf(ShiftX, ShiftY, RMSE, vmin=2.5, vmax=5,
+cb = ax.contourf(ShiftX, ShiftY, RMSE,
                  extend='max', levels=501)
-fig.colorbar(cb, ticks=(2.5, 3, 3.5, 4, 4.5, 5))
+fig.colorbar(cb, ticks=(2.0, 2.5, 3, 3.5, 4, 4.5, 5))
 
 fig.tight_layout()
 fig.show()
+print(RMSE.min())
 
 Cam1 = Pinhole((u.mean(), v.mean()), 1)
 Cam1.Fit(u, v, X, Y, Z)
@@ -163,7 +165,3 @@ ax.scatter(u_rp[Sample], v_rp[Sample], color=ErrorColor(np.sqrt(e[Sample])), edg
 print(result.x)
 
 fig.show()
-
-
-
-
