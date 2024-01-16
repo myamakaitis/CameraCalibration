@@ -15,7 +15,7 @@ def ErrorColor(error):
 
     return cmap(error)
 
-File = "Marks_D.csv"
+File = "TestFits/Marks_D.csv"
 Data = pd.read_csv(File)
 
 Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
