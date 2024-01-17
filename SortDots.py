@@ -211,7 +211,7 @@ class PatternGrid:
 
 if __name__ == "__main__":
 
-    img = cv.imread("TestCases/Good.png")
+    img = cv.imread("TestImages/Good.png")
 
     pg = PatternGrid(3.0)
 

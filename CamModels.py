@@ -438,7 +438,7 @@ if __name__ == '__main__':
         import matplotlib.pyplot as pyp
         import pandas as pd
 
-        df = pd.read_csv("TestPinhole.csv")
+        df = pd.read_csv("TestFits/TestPinhole4545.csv")
         X, Y, Z = df["X"], df["Y"], df["Z"]
         u, v = df["u"], df["v"]
 

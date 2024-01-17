@@ -5,7 +5,7 @@ from CamModels import Polynomial
 from numpy.random import random
 
 
-File = "C_cal.csv"
+File = "TestFits/Marks_A.csv"
 Data = pd.read_csv(File)
 
 # Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
