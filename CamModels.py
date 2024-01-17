@@ -23,9 +23,9 @@ class Pinhole:
 
         return self.R
 
-    def TransVec(self):
-        self.T = np.array([self.tx, self.ty, self.tz])
-        return self.T
+    # def TransVec(self):
+    #     self.T = np.array([self.tx, self.ty, self.tz])
+    #     return self.T
 
     def CombineRT(self):
         self.Rt = np.zeros((3, 4), dtype=np.float64)
@@ -42,7 +42,7 @@ class Pinhole:
 
     def PerspectiveEqn(self, x, y, z):
         # 3d cam coordinates -> Undistorted Image Coordinates
-        Xu, Yu = self.f * (x / z), self.f * (y / z)
+        Xu, Yu = self.sx*self.f * (x / z), self.f * (y / z)
 
         return Xu, Yu
 
@@ -59,7 +59,7 @@ class Pinhole:
     def RealCoordinates(self, X, Y):
         # distorted cam coordinates -> pixel coordinates
 
-        u = self.sx*X/self.dx + self.Cx
+        u = X/self.dx + self.Cx
         v = Y/self.dx + self.Cy
 
         return u, v
@@ -100,9 +100,9 @@ class Pinhole:
 
         self.CombineRT()
 
-        self.Refine_f_Tz(Xw, Yw, Zw, u, v)
-
-        self.CalcDistortion(Xw, Yw, Zw, u, v)
+        for i in range(5):
+            self.Refine_f_Tz(Xw, Yw, Zw, u, v)
+            self.CalcDistortion(Xw, Yw, Zw, u, v)
 
     def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
         pass
@@ -205,7 +205,39 @@ class Pinhole:
             return -1
 
 
-class PinholeCV2(Pinhole):
+class RADIAL(Pinhole):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.k1 = 0
+        self.k2 = 0
+
+    def Distortion(self, Xu, Yu):
+
+        R2 = Xu**2 + Yu**2
+
+        X = (1 + self.k1 * R2 + self.k2 * R2**2)*Xu
+        Y = (1 + self.k1 * R2 + self.k2 * R2**2)*Yu
+
+        return X, Y
+
+    def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
+
+        guess = np.array([self.k1, self.k2])
+
+        minimize(self.AdjustDistortion, guess,
+                 args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-8)
+
+
+    def AdjustDistortion(self, Coeffs, Xw, Yw, Zw, u_act, v_act):
+
+        self.k1 = Coeffs[0]
+        self.k2 = Coeffs[1]
+
+        return self.RMSE(Xw, Yw, Zw, u_act, v_act)
+
+class OPENCV_cam(Pinhole):
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -227,7 +259,7 @@ class PinholeCV2(Pinhole):
 
     def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
 
-        guess = np.array([0.0, 0.0, 0.0, 0.0])
+        guess = np.array([self.k1, self.k2, self.p1, self.p2])
 
         minimize(self.AdjustDistortion, guess,
                  args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-8)
@@ -243,7 +275,8 @@ class PinholeCV2(Pinhole):
 
         return self.RMSE(Xw, Yw, Zw, u_act, v_act)
 
-class PinholeCV2_ThinPrism(Pinhole):
+
+class FisheyeThinPrism(Pinhole):
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -275,7 +308,7 @@ class PinholeCV2_ThinPrism(Pinhole):
 
     def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
 
-        guess = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        guess = np.array([self.k1, self.k2, self.p1, self.p2, self.k3, self.k4, self.s1, self.s2])
 
         minimize(self.AdjustDistortion, guess,
                  args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-6)
@@ -295,9 +328,6 @@ class PinholeCV2_ThinPrism(Pinhole):
         self.s1 = Coeffs[6]
         self.s2 = Coeffs[7]
 
-        self.s3 = Coeffs[8]
-        self.s4 = Coeffs[9]
-
         return self.RMSE(Xw, Yw, Zw, u_act, v_act)
 
 
@@ -312,21 +342,21 @@ class Polynomial:
     def RowLabels(self):
         self._rl = []
 
-        for l in range(self.N_coefficients):
-            row_str = ""
-            if self.Ci[l] > 0:
-                row_str = row_str + f"x^{self.Ci[l]} "
-            if self.Cj[l] > 0:
-                row_str = row_str + f"y^{self.Cj[l]} "
-            if self.Ck[l] > 0:
-                row_str = row_str + f"z^{self.Ck[l]}"
-            if row_str == "":
-                row_str = "1"
-            self._rl.append(row_str)
+        # for l in range(self.N_coefficients):
+        #     row_str = ""
+        #     if self.Ci[l] > 0:
+        #         row_str = row_str + f"x^{self.Ci[l]} "
+        #     if self.Cj[l] > 0:
+        #         row_str = row_str + f"y^{self.Cj[l]} "
+        #     if self.Ck[l] > 0:
+        #         row_str = row_str + f"z^{self.Ck[l]}"
+        #     if row_str == "":
+        #         row_str = "1"
+        #     self._rl.append(row_str)
 
         row_str = ""
         for l in range(self.N_coefficients):
-            row_str = row_str + f"+ a_{l}"
+            row_str = row_str + f" + a_{l}"
 
             if self.Ci[l] > 0:
                 row_str = row_str + f"x^{self.Ci[l]}"
@@ -334,9 +364,9 @@ class Polynomial:
                 row_str = row_str + f"y^{self.Cj[l]} "
             if self.Ck[l] > 0:
                 row_str = row_str + f"z^{self.Ck[l]}"
-            if row_str == "":
-                row_str = "1"
-        self._rl = row_str
+            # if row_str == "":
+            #     row_str = "1"
+        self._rl = row_str[3:]
 
         return self._rl
 
@@ -356,7 +386,7 @@ class Polynomial:
         self.Ck = k
         self.N_coefficients = len(i)
 
-    def NewPoly3rdOrder(self, coeffs):
+    def NewPoly(self, coeffs):
         def Poly(x, y, z):
             val = 0
             for l in range(self.N_coefficients):
@@ -397,8 +427,8 @@ class Polynomial:
         self.u_coeffs, u_e_px = self.FitPoly(x, y, z, u)
         self.v_coeffs, v_e_px = self.FitPoly(x, y, z, v)
 
-        self.Upoly = self.NewPoly3rdOrder(self.u_coeffs)
-        self.Vpoly = self.NewPoly3rdOrder(self.v_coeffs)
+        self.Upoly = self.NewPoly(self.u_coeffs)
+        self.Vpoly = self.NewPoly(self.v_coeffs)
 
         return np.sqrt(u_e_px**2 + v_e_px**2)
 
@@ -432,8 +462,4 @@ if __name__ == '__main__':
         print(Cam1.Rt)
         print(Cam1.f)
         print(Cam1.sx)
-
-
-
-
 

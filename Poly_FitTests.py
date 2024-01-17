@@ -5,13 +5,16 @@ from CamModels import Polynomial
 from numpy.random import random
 
 
-File = "Marks_A.csv"
+File = "C_cal.csv"
 Data = pd.read_csv(File)
 
-Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
+# Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
 
-u, v = Data["u"].values, Data["v"].values
-X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
+# u, v = Data["u"].values, Data["v"].values
+# X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
+
+u, v = Data["Xcam1"].values, Data["Ycam1"].values
+X, Y, Z = Data["x"].values, Data["y"].values, Data["z"].values
 
 fig, ax = pyp.subplots()
 for z_plane in np.sort(list(set(Z)))[::2]:
@@ -33,7 +36,7 @@ u_rp, v_rp = polyCam.Map(X, Y, Z)
 U_e, V_e = u_rp - u, v_rp - v
 e = (U_e ** 2 + V_e ** 2)
 
-MaxError = 3
+MaxError = 30
 u, v = u[e < MaxError], v[e < MaxError]
 X, Y, Z = X[e < MaxError], Y[e < MaxError], Z[e < MaxError]
 
@@ -67,7 +70,7 @@ def PlotProjErrors(u_e, v_e, e, ax_scatter, ax_hist, scatter_label, hist_label):
     ax.legend(loc='lower right')
 
     axh.set_title(hist_label)
-    logbins = np.logspace(np.log10(0.01), np.log10(5), 10)
+    logbins = np.logspace(np.log10(0.05), np.log10(3), 20)
     axh.hist(e[Used], bins=logbins, label='Fit')
 
     axh.set_ylim(0, 210)
@@ -79,7 +82,7 @@ def PlotProjErrors(u_e, v_e, e, ax_scatter, ax_hist, scatter_label, hist_label):
     axhtest.set_ylabel("Number (Test)")
     axhtest.set_ylim(axh.get_ylim()[0], 2 * Ratio * axh.get_ylim()[1])
     axh.set_xlabel("error [px]")
-    axh.set_xlim(0.01, 5)
+    axh.set_xlim(0.05, 10)
     axh.set_xscale('log')
     axh.grid(True)
     axh.legend(loc=(0.71, 0.89), frameon=False)
@@ -89,7 +92,7 @@ def PlotProjErrors(u_e, v_e, e, ax_scatter, ax_hist, scatter_label, hist_label):
 
 
 for d in Orders:
-    polyCam = Polynomial(MaxOrders=(d, d, d))
+    polyCam = Polynomial(MaxOrders=(d, d, np.min([3, d])))
 
     polyCam.FitCam(u[Used], v[Used],
                    X[Used], Y[Used], Z[Used])
@@ -108,7 +111,9 @@ for d in Orders:
 
     ax, axh = axes[2 * ((d-1)//4), (d-1) % 4], axes[1 + 2 * ((d-1)//4), (d-1) % 4]
 
+    e = np.sqrt(e)
     PlotProjErrors(U_e, V_e, e, ax, axh, f"Order = {d}", "Histogram")
+    print(polyCam.RowLabels)
 
 
 fig.show()
@@ -125,4 +130,5 @@ ax.set_yticks((0.5, 1, 2, 4))
 ax.set_yticklabels((0.5, 1, 2, 4))
 ax.grid(True)
 fig.show()
+print(RMSEf)
 
