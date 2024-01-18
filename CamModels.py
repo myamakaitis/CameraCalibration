@@ -188,7 +188,16 @@ class Pinhole:
         sign = self.GetSign(abs_Ty, Tx, self.R, TestXYZ, TestUV)
 
         Ty = sign*abs_Ty
+        Tx = sign*Tx
         # sx *= sign
+
+        self.R = sign*self.R
+
+        self.R[-1, :] = np.cross(self.R[0, :], self.R[1, :])
+        if np.allclose(np.sign(np.linalg.det(self.R)), -1):
+            self.R[-1, :] *= -1
+        if np.abs(np.linalg.det(self.R) - 1) > 1e-2:
+            raise ValueError("Rotation Matrix Determinant != 1")
 
         return Tx, Ty, sx
 
@@ -199,11 +208,40 @@ class Pinhole:
         Xmatch = (np.sign(x + Tx) == np.sign(testuv[0]))
         Ymatch = (np.sign(y + abs_Ty) == np.sign(testuv[1]))
 
-        if Xmatch == Ymatch:
-            return 1
-        else:
+        if Xmatch and Ymatch:
             return -1
+        else:
+            return 1
 
+class SIMPLE_RADIAL(Pinhole):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+
+        self.k1 = 0
+
+    def Distortion(self, Xu, Yu):
+
+        R2 = Xu**2 + Yu**2
+
+        X = (1 + self.k1 * R2)*Xu
+        Y = (1 + self.k1 * R2)*Yu
+
+        return X, Y
+
+    def CalcDistortion(self, Xw, Yw, Zw, u_act, v_act):
+
+        guess = np.array([self.k1])
+
+        minimize(self.AdjustDistortion, guess,
+                 args=(Xw, Yw, Zw, u_act, v_act), method='Nelder-Mead', tol=1e-4)
+
+
+    def AdjustDistortion(self, Coeffs, Xw, Yw, Zw, u_act, v_act):
+
+        self.k1 = Coeffs[0]
+
+        return self.RMSE(Xw, Yw, Zw, u_act, v_act)
 
 class RADIAL(Pinhole):
 

@@ -29,9 +29,10 @@
 import numpy as np
 import matplotlib.pyplot as pyp
 import pandas as pd
-from CamModels import OPENCV_cam, Pinhole, RADIAL
+from CamModels import OPENCV_cam, Pinhole, RADIAL, SIMPLE_RADIAL
 from numpy.random import random
 from scipy.spatial.transform import Rotation
+from time import perf_counter
 
 File = "C_Cal.csv"
 Data = pd.read_csv(File)
@@ -47,19 +48,23 @@ Ncams = 4
 RMSEs = np.full(4, np.inf, dtype=np.float64)
 
 for i in range(Ncams):
+    print(i)
 
     u, v = Data[f"Xcam{i}"].values, Data[f"Ycam{i}"].values
 
     Ucams.append(np.copy(u))
     Vcams.append(np.copy(v))
 
-    shiftX = np.linspace(0, 2 * u.mean(), 35)
-    shiftY = np.linspace(0, 2 * v.mean(), 35)
+    Ncoarse = 35
+    shiftX = np.linspace(0, 2 * u.mean(), Ncoarse)
+    shiftY = np.linspace(0, 2 * v.mean(), Ncoarse)
     ShiftX, ShiftY = np.meshgrid(shiftX, shiftY)
+
+    t0 = perf_counter()
 
     for sx, sy in zip(ShiftX.ravel(), ShiftY.ravel()):
 
-        Cami = RADIAL((sx, sy), 1)
+        Cami = Pinhole((sx, sy), 1)
         Cami.Fit(u, v, Xw, Yw, Zw)
 
         rmse = Cami.RMSE(Xw, Yw, Zw, u, v)
@@ -68,12 +73,36 @@ for i in range(Ncams):
             RMSEs[i] = rmse
             Cx, Cy = sx, sy
 
-    Cam_i = OPENCV_cam((Cx, Cy), 1)
+    tf = perf_counter()
+
+    print(f"coarse done {tf - t0}")
+    t0 = perf_counter()
+
+    du1 = shiftX[1] - shiftX[0]
+    dv1 = shiftY[1] - shiftY[0]
+
+    Nfine = 31
+    shiftX = np.linspace(-2*du1, 2*du1, Nfine)
+    shiftY = np.linspace(-2*dv1, 2*dv1, Nfine)
+    ShiftX, ShiftY = np.meshgrid(shiftX, shiftY)
+    for sx, sy in zip(ShiftX.ravel(), ShiftY.ravel()):
+
+        Cami = Pinhole((sx, sy), 1)
+        Cami.Fit(u, v, Xw, Yw, Zw)
+
+        rmse = Cami.RMSE(Xw, Yw, Zw, u, v)
+
+        if rmse < RMSEs[i]:
+            RMSEs[i] = rmse
+            Cx, Cy = sx, sy
+
+    tf = perf_counter()
+    print(f"fine done {tf - t0}")
+
+    Cam_i = Pinhole((Cx, Cy), 1)
     Cam_i.Fit(u, v, Xw, Yw, Zw)
 
     Cams.append(Cam_i)
-
-print(RMSEs)
 
 with open("cameras.txt", 'w') as cameras, open("images.txt", "w") as images, open("points3D.txt", 'w') as points3d:
 
@@ -83,19 +112,23 @@ with open("cameras.txt", 'w') as cameras, open("images.txt", "w") as images, ope
     for i in range(4):
 
         cami = Cams[i]
-        cameras.write(f"{i+1} OPENCV 4512 800 ")
+        cameras.write(f"{i+1} PINHOLE 4512 800 ")
 
         fx, fy = Cams[i].f*Cams[i].sx, Cams[i].f
-        Cx, Cy = Cams[i].Cx, Cams[i].Cy
-        k1, k2 = Cams[i].k1, Cams[i].k2
-        p1, p2 = Cams[i].p1, Cams[i].p2
 
-        cameras.write(f"{fx:.10f} {fy:.10f} {Cx:.10f} {Cy:.10f} {k1:.15f} {k2:.15f} {p1:.15f} {p2:.15f} \n")
+        Cx, Cy = Cams[i].Cx, Cams[i].Cy
+        # k1 = Cams[i].k1
+        # k1, k2 = Cams[i].k1, Cams[i].k2
+        # p1, p2 = Cams[i].p1, Cams[i].p2
+
+        # cameras.write(f"{fx:.10f} {fy:.10f} {Cx:.10f} {Cy:.10f} {k1:.15f} {k2:.15f} {p1:.15f} {p2:.15f} \n")
+        # cameras.write(f"{Cams[i].f:.10f} {Cx:.10f} {Cy:.10f} {k1:.15f}\n")
+        cameras.write(f"{fx:.10f} {fy:.10f} {Cx:.10f} {Cy:.10f}\n")
 
         Qx, Qy, Qz, Qw = Rotation.from_matrix(Cams[i].R).as_quat()
         Tx, Ty, Tz = Cams[i].T
 
-        imageCamLines[i] = f"{i+1} {Qw:.15f} {Qx:.15f} {Qy:.15f} {Qz:.15f} {Tx:.15f} {Ty:.15f} {Tz:.15f} {i+1} D_cam{i}_0001.png\n"
+        imageCamLines[i] = f"{i+1} {Qw:.15f} {Qx:.15f} {Qy:.15f} {Qz:.15f} {Tx:.15f} {Ty:.15f} {Tz:.15f} {i+1} C_cam{i}_0001a.png\n"
         imagePointLines[i] = ""
 
     for j in range(len(Xw)):
@@ -112,9 +145,7 @@ with open("cameras.txt", 'w') as cameras, open("images.txt", "w") as images, ope
         images.write(imagePointLines[i])
         images.write("\n")
 
-
-
-
+print(RMSEs)
 
 
 
