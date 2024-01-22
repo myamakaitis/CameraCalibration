@@ -138,7 +138,7 @@ fig.show()
 figs.show()
 figh.show()
 
-Cam1 = FisheyeThinPrism((Cx, Cy), 1)
+Cam1 = OPENCV_cam((Cx, Cy), 1)
 Cam1.Fit(u, v, X, Y, Z)
 
 print(f"RMSE = {Cam1.RMSE(X, Y, Z, u, v)}, Cx={Cx}, Cy={Cy}, f={Cam1.f}")

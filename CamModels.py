@@ -42,25 +42,20 @@ class Pinhole:
 
     def PerspectiveEqn(self, x, y, z):
         # 3d cam coordinates -> Undistorted Image Coordinates
-        Xu, Yu = self.sx*self.f * (x / z), self.f * (y / z)
+        Xu, Yu = (x / z), (y / z)
 
         return Xu, Yu
 
     def Distortion(self, Xu, Yu):
         # undistorted image coordinates -> distorted coordinates
 
-        # R2 = Xu ** 2 + Yu ** 2
-
-        # X = Xu / (1 + self.k * R2)
-        # Y = Yu / (1 + self.k * R2)
-
         return Xu, Yu
 
     def RealCoordinates(self, X, Y):
         # distorted cam coordinates -> pixel coordinates
 
-        u = X/self.dx + self.Cx
-        v = Y/self.dx + self.Cy
+        u = self.sx*self.f * X/self.dx + self.Cx
+        v = self.f*Y/self.dx + self.Cy
 
         return u, v
 
@@ -473,31 +468,30 @@ class Polynomial:
 
 if __name__ == '__main__':
 
-        import matplotlib.pyplot as pyp
-        import pandas as pd
+    import matplotlib.pyplot as pyp
+    import pandas as pd
 
-        df = pd.read_csv("TestFits/TestPinhole4545.csv")
-        X, Y, Z = df["X"], df["Y"], df["Z"]
-        u, v = df["u"], df["v"]
+    df = pd.read_csv("TestFits/TestPinhole4545.csv")
+    X, Y, Z = df["X"], df["Y"], df["Z"]
+    u, v = df["u"], df["v"]
 
-        Cam1 = Pinhole((0, 0), 6.5e-3)
+    Cam1 = Pinhole((0, 0), 1)
 
-        Cam1.Fit(u, v, X, Y, Z)
-        Cam1.k = 0
+    Cam1.Fit(u, v, X, Y, Z)
+    Cam1.k = 0
 
-        u1, v1 = Cam1.Map(X, Y, Z)
+    u1, v1 = Cam1.Map(X, Y, Z)
 
-        fig, (ax1, ax2) = pyp.subplots(2, figsize=(4,8), sharex=True, sharey=True)
+    fig, (ax1, ax2) = pyp.subplots(2, figsize=(4,8), sharex=True, sharey=True)
 
-        ax1.scatter(u, v, s=1)
-        ax2.scatter(u1, v1, s=1)
+    ax1.scatter(u, v, s=1)
+    ax2.scatter(u1, v1, s=1)
 
-        ax1.set_aspect('equal')
-        ax2.set_aspect('equal')
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
 
-        fig.show()
+    fig.show()
 
-        print(Cam1.Rt)
-        print(Cam1.f)
-        print(Cam1.sx)
-
+    print(Cam1.Rt)
+    print(Cam1.f)
+    print(Cam1.sx)
