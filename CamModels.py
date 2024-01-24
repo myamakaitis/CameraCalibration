@@ -204,9 +204,9 @@ class Pinhole:
         Ymatch = (np.sign(y + abs_Ty) == np.sign(testuv[1]))
 
         if Xmatch and Ymatch:
-            return -1
-        else:
             return 1
+        else:
+            return -1
 
 class SIMPLE_RADIAL(Pinhole):
 
@@ -476,9 +476,18 @@ if __name__ == '__main__':
     u, v = df["u"], df["v"]
 
     Cam1 = Pinhole((0, 0), 1)
+    #
+    # File = "C_Cal.csv"
+    # Data = pd.read_csv(File)
+
+    # X, Y, Z = Data["x"].values, Data["y"].values, Data["z"].values
+
+    # Cam1 = Pinhole((800, 500), 1)
+
+    i = 0
+    # u, v = Data[f"Xcam{i}"].values, Data[f"Ycam{i}"].values
 
     Cam1.Fit(u, v, X, Y, Z)
-    Cam1.k = 0
 
     u1, v1 = Cam1.Map(X, Y, Z)
 
@@ -491,6 +500,8 @@ if __name__ == '__main__':
     ax2.set_aspect('equal')
 
     fig.show()
+
+    print(f"RMSE = {Cam1.RMSE(X, Y, Z, u, v)}")
 
     print(Cam1.Rt)
     print(Cam1.f)

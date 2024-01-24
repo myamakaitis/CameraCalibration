@@ -132,7 +132,7 @@ with open("cameras.txt", 'w') as cameras, open("images.txt", "w") as images, ope
         imagePointLines[i] = ""
 
     for j in range(len(Xw)):
-        points3d.write(f"{j+1} {Xw[j]} {Yw[j]} {Zw[j]} 128 128 128 1")
+        points3d.write(f"{j+1} {Xw[j]} {Yw[j]} {Zw[j]} 255 255 255 1")
 
         for i in range(Ncams):
             points3d.write(f" {i} {j}")

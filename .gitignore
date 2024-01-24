@@ -7,3 +7,5 @@
 images.txt
 points3D.txt
 cameras.txt
+*.npy
+DebugR.py
