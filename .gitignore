@@ -9,3 +9,4 @@ points3D.txt
 cameras.txt
 *.npy
 DebugR.py
+.ipynb_checkpoints/mae6292_comp-checkpoint.ipynb

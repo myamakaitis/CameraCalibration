@@ -65,7 +65,7 @@ class Pinhole:
         X, Y = self.Distortion(Xu, Yu)
         u, v = self.RealCoordinates(X, Y)
 
-        return u, v
+        return np.array([u, v])
 
     def RMSE(self, Xw, Yw, Zw, u_actual, v_actual):
 

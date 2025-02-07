@@ -7,14 +7,15 @@ from numpy.random import random
 
 File = "TestFits/Marks_A.csv"
 Data = pd.read_csv(File)
+Data = pd.read_csv("Marks.csv")
 
 # Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
 
-# u, v = Data["u"].values, Data["v"].values
-# X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
+u, v = Data["u"].values, Data["v"].values
+X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
 
-u, v = Data["Xcam1"].values, Data["Ycam1"].values
-X, Y, Z = Data["x"].values, Data["y"].values, Data["z"].values
+# u, v = Data["Xcam1"].values, Data["Ycam1"].values
+# X, Y, Z = Data["x"].values, Data["y"].values, Data["z"].values
 
 fig, ax = pyp.subplots()
 for z_plane in np.sort(list(set(Z)))[::2]:
@@ -113,9 +114,9 @@ for d in Orders:
 
     e = np.sqrt(e)
     PlotProjErrors(U_e, V_e, e, ax, axh, f"Order = {d}", "Histogram")
-    print(polyCam.RowLabels)
+    # print(polyCam.RowLabels)
 
-
+fig.savefig("ReprojectionScatter.png")
 fig.show()
 
 fig, ax = pyp.subplots()
@@ -126,9 +127,10 @@ ax.set_yscale('log')
 ax.set_xlabel("Polynomial Order")
 ax.set_ylabel("RMSE [px]")
 
-ax.set_yticks((0.5, 1, 2, 4))
-ax.set_yticklabels((0.5, 1, 2, 4))
+ax.set_yticks((0.1, 0.5, 1, 2))
+ax.set_yticklabels((0.1, 0.5, 1, 2))
 ax.grid(True)
+fig.savefig("RMSE.png")
 fig.show()
 print(RMSEf)
 

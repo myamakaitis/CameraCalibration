@@ -61,36 +61,27 @@ def CalibrateGrid(ImagesPath, translations, GridSpacing, stack_template=None):
 
 if __name__ == "__main__":
 
-    Case = "A"
+    Case = "D"
 
-    Folder = f"TestCases/Perspective{Case}/"
-    imgs = [Folder + f"cal_{i:03d}_{Case}.tif" for i in range(12)]
+    # Folder = f"TestImages/Perspective{Case}/"
+    # imgs = [Folder + f"cal_{i:03d}_{Case}.tif" for i in range(12)]
 
-    z = np.arange(0, 12)
+    Folder = f"TestImages/split2/"
+    imgs = [Folder + f"cal_{i:03d}_{Case}.tif" for i in np.arange(7, 16)]
+
+    z = np.arange(0, 5.0, 0.5)
 
     print(z)
     Translations = [np.array([0, 0, zi]) for zi in z]
 
-    InFocusTemplate = MakeTemplate(cv.imread(imgs[6], -1))
+    InFocusTemplate = MakeTemplate(cv.imread(imgs[len(imgs)//2], -1))
 
     Table, colored_images = CalibrateGrid(imgs, Translations, 1, stack_template=InFocusTemplate)
 
-    Table.to_csv(f"Marks_{Case}.csv")
+    # Table.to_csv(f"Marks_{Case}.csv")
+    Table.to_csv(f"Marks2.csv")
 
-    for i in range(12):
-        cv.imwrite(Folder + f"AfterCal/Cal_z={z[i]}.png", colored_images[i])
+    # for i in range(12):
+    #     cv.imwrite(Folder + f"AfterCal/Cal_z={z[i]}.png", colored_images[i])
 
     print("done")
-
-
-
-
-
-
-
-
-
-
-
-
-
