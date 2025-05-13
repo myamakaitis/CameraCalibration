@@ -10,3 +10,6 @@ cameras.txt
 *.npy
 DebugR.py
 .ipynb_checkpoints/mae6292_comp-checkpoint.ipynb
+*.ini
+*.csv
+dot_target_water/Masks/150_maskgen.py
