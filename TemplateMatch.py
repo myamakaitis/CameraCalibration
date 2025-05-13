@@ -29,7 +29,7 @@ def MakeTemplate(img):
     return template
 
 
-def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=2.1):
+def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=5):
 
     if template is None:
         template = MakeTemplate(img)
@@ -41,15 +41,18 @@ def GetMarkLocs(img, MinSeparation, template=None, AvgWindow=9, MinContrast=2.1)
     u_int = peak_indices[1]
     v_int = peak_indices[0]
 
-    bad_points = ShowCircs(img, u_int, v_int)
+    bad_points = ShowCircs(img, u_int, v_int, radius=MinSeparation/2)
     u_int, v_int = u_int[bad_points], v_int[bad_points]
 
     u, v = SubPixelPeaks(peaks, u_int, v_int, MinSeparation//3)
 
+    u += template.shape[1]//2
+    v += template.shape[0]//2
+
     return u, v, template
 
 
-def ShowCircs(img_gs, u, v):
+def ShowCircs(img_gs, u, v, radius = 17):
     global rmPt
     rmPt = []
 
@@ -61,7 +64,7 @@ def ShowCircs(img_gs, u, v):
 
     for k in range(len(u)):
         g[v[k] - 1:v[k] + 2, u[k] - 1:u[k] + 2, :] = (color_value, color_value, color_value)
-        cv.circle(g, (u[k], v[k]), 17, (color_value, color_value, color_value), 3)
+        cv.circle(g, (u[k], v[k]), int(radius), (color_value, color_value, color_value), 3)
 
     cv.namedWindow("Found Marks")
     cv.setMouseCallback("Found Marks", click_rm)
@@ -179,9 +182,9 @@ def DotPeaks(img, template):
 
 def MaxFind(img, search_size, minthresh = 2.5):
 
-    PeakLocs = np.zeros(img.shape, dtype=np.bool)
+    PeakLocs = np.zeros(img.shape, dtype=bool)
 
-    mask = (img > minthresh*img.mean()).astype(np.bool)
+    mask = (img > minthresh*img.mean()).astype(bool)
 
     hss = search_size//2
 

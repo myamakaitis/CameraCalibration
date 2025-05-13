@@ -6,6 +6,7 @@ from numpy.random import random
 
 
 File = "TestFits/Marks_A.csv"
+File = "InvMic_MarkLocs_CamA.csv"
 Data = pd.read_csv(File)
 
 # Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
@@ -13,7 +14,8 @@ Data = pd.read_csv(File)
 # u, v = Data["u"].values, Data["v"].values
 # X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
 
-u, v = Data["Xcam1"].values, Data["Ycam1"].values
+# u, v = Data["Xcam1"].values, Data["Ycam1"].values
+u, v = Data['u'], Data['v']
 X, Y, Z = Data["x"].values, Data["y"].values, Data["z"].values
 
 fig, ax = pyp.subplots()
@@ -48,7 +50,7 @@ fig.suptitle(f"Reprojection Errors")
 
 # axes = axes.reshape(2, 8).T
 
-Orders = np.arange(1, 9)
+Orders = np.arange(1, 6)
 RMSEf = []
 RMSEt = []
 

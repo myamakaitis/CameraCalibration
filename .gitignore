@@ -9,3 +9,8 @@ points3D.txt
 cameras.txt
 *.npy
 DebugR.py
+*.ini
+*.csv
+splitterCF.ipynb
+splitter.ipynb
+dot_target_water/Masks/150_maskgen.py

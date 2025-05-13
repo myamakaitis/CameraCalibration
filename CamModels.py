@@ -1,5 +1,90 @@
 import numpy as np
 from scipy.optimize import minimize
+import scipy.linalg as linalg
+
+class PinholeDLT:
+
+    def __init__(self):
+        pass
+        
+    def Fit(self, u, v, x, y, z):
+        # p : homogeneous coordinates of pixel in the image frame
+        # P : homogeneous coordinates of points in the world frame
+        P = np.ones((4, x.size))
+        P[0, :] = x
+        P[1, :] = y
+        P[2, :] = z
+
+        p = np.ones((3, x.size))
+        p[0, :] = u
+        p[1, :] = v
+
+        assert p.shape[0] == 3, "p : homogeneous coordinates of pixel in the image frame of 3 by n"
+        assert P.shape[0] == 4, "P : homogeneous coordinates of points in the world frame"
+        assert p.shape[1] == P.shape[1], "number of columns of p shold match with P"
+
+        n = p.shape[1]
+        p_uv = p[0:2,:]/p[2,:]
+
+        Q = np.empty((0, 12))
+        for i in range(n):
+            Qi_0 = np.array([ [1,0, -p_uv[0,i]], [0, 1, -p_uv[1,i]]] )
+            Qi = np.kron(Qi_0, P[:,i].T)
+            Q = np.append(Q, Qi, axis=0)
+
+        # 1. Find M_tilde using SVD
+
+        U, S, VT = linalg.svd(Q)
+        M_tilde = VT.T[:,-1].reshape(3,4)
+        # print(M_tilde /M_cv) # M is determined up to scale
+
+        # 2. RQ factorization to find K_tilde and R
+
+        K_tilde, R = linalg.rq(M_tilde [:,0:3])
+
+        # 3. Resolve the ambiguity of RQ factorization
+        D = np.diag( np.sign(np.diag(K_tilde)) )
+        K_tilde  = K_tilde@D
+        R = D@R
+
+        # 4. Find T
+        T = linalg.solve(K_tilde, M_tilde[:,-1]).reshape(3,1)
+
+        # 5. Recover scale
+
+        s = 1/K_tilde[2,2]
+        K = s*K_tilde
+        M = s*M_tilde
+
+        # 6. Resolve sign ambiguity
+        if linalg.det(R) < 0:
+            R = -R
+            T = -T
+            M = -M
+
+        self.K, self.R, self.T, self.M = K, R, T, M
+        return K, R, T, M
+    
+    def Map(self, x, y, z):
+        
+        xyz_homogenous = np.ones((4, x.size))
+        xyz_homogenous[0, :] = x
+        xyz_homogenous[1, :] = y
+        xyz_homogenous[2, :] = z
+
+        u_p, v_p, h = self.M @ xyz_homogenous
+        u_p, v_p = u_p/h, v_p/h
+
+        return u_p, v_p
+    
+    def RMSE(self, Xw, Yw, Zw, u_actual, v_actual):
+
+        u_rp, v_rp = self.Map(Xw, Yw, Zw)
+        U_e, V_e = u_rp - u_actual, v_rp - v_actual
+        e = (U_e ** 2 + V_e ** 2)
+
+        rmse = np.sqrt(1 / len(e) * np.sum(e))
+        return rmse
 
 
 class Pinhole:
