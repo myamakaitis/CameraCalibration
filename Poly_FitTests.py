@@ -5,11 +5,11 @@ from CamModels import Polynomial
 from numpy.random import random
 
 
-File = "TestFits/Marks_A.csv"
+File = "TestFits/Marks_B.csv"
 Data = pd.read_csv(File)
-Data = pd.read_csv("Marks.csv")
+# Data = pd.read_csv("Marks.csv")
 
-# Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
+Data = Data[(1 < Data["Z"]) & (Data["Z"] < 11)]
 
 u, v = Data["u"].values, Data["v"].values
 X, Y, Z = Data["X"].values, Data["Y"].values, Data["Z"].values
@@ -115,6 +115,23 @@ for d in Orders:
     e = np.sqrt(e)
     PlotProjErrors(U_e, V_e, e, ax, axh, f"Order = {d}", "Histogram")
     # print(polyCam.RowLabels)
+
+    magma = pyp.get_cmap("magma")
+
+    from matplotlib.colors import Normalize
+    from matplotlib.cm import ScalarMappable
+
+    norm = Normalize(vmin=0, vmax=1.5)
+    cb = ScalarMappable(norm=norm, cmap=magma)
+
+    if d == 3:
+        fig_scatter, ax_scatter = pyp.subplots(dpi=150)
+        ax_scatter.scatter(u, v, s=10, color=magma(e))
+
+        ax_scatter.set_aspect("equal")
+
+        fig_scatter.colorbar(cb, ax=ax_scatter, orientation='vertical', norm=norm, cmap=magma)
+        fig_scatter.show()
 
 fig.savefig("ReprojectionScatter.png")
 fig.show()
